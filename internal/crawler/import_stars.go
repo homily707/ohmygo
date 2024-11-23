@@ -2,12 +2,10 @@ package crawler
 
 import (
 	"fmt"
-	"io"
-	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gocolly/colly"
-	"github.com/tidwall/gjson"
 )
 
 func ImportedByRepo(url string) {
@@ -40,27 +38,31 @@ func ImportedByRepo(url string) {
 		if i%100 == 0 {
 			fmt.Println(i)
 		}
-		stars := GetStars(r)
+		stars, _ := GetStars(r)
 		if stars > 0 {
 			fmt.Println(r + ": " + fmt.Sprint(stars))
 		}
 	}
 }
 
-func GetStars(r string) int {
+func GetStars(r string) (int, error) {
 	ss := strings.Split(r, "/")
 	if len(ss) < 3 {
-		return 0
+		return 0, nil
 	}
+	star := 0
 	c := colly.NewCollector()
-	c.OnXML()
-	resp, err := http.Get("https://api.github.com/repos/" + ss[0] + "/" + ss[1])
+	c.OnXML(`//*[@id="repo-stars-counter-star"]`, func(e *colly.XMLElement) {
+		star, _ = strconv.Atoi(e.Attr("title"))
+	})
+	// c.OnResponse(func(r *colly.Response) {
+	// 	fmt.Print(r.Headers)
+	// })
+	url := "https://github.com/" + ss[1] + "/" + ss[2]
+	err := c.Visit(url)
 	if err != nil {
-		fmt.Println(err)
-		return 0
+		return 0, err
 	}
-	bs, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	stars := gjson.GetBytes(bs, "stargazers_count").Int()
-	return int(stars)
+	c.Wait()
+	return star, nil
 }
