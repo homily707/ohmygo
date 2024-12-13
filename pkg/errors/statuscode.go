@@ -9,18 +9,26 @@ var (
 	NotFoundError = NewErrorWithCode(http.StatusNotFound, "not found")
 )
 
+type HttpError interface {
+	StatusCode() int
+}
+
 type ErrorWithCode struct {
-	StatusCode int    `json:"status_code"`
-	Message    string `json:"message"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func (e ErrorWithCode) StatusCode() int {
+	return e.Code
 }
 
 func (e ErrorWithCode) Error() string {
-	return fmt.Sprintf("%d: %s", e.StatusCode, e.Message)
+	return fmt.Sprintf("%d: %s", e.Code, e.Message)
 }
 
 func NewErrorWithCode(statusCode int, message string) *ErrorWithCode {
 	return &ErrorWithCode{
-		StatusCode: statusCode,
-		Message:    message,
+		Code:    statusCode,
+		Message: message,
 	}
 }
