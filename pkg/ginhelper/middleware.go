@@ -1,7 +1,6 @@
 package ginhelper
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -11,25 +10,30 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var commonLogger *logrus.Logger = logrus.StandardLogger()
+var fallbackLogger logrus.FieldLogger = logrus.NewEntry(logrus.StandardLogger())
 
-func SetCommonLogger(logger *logrus.Logger) {
-	commonLogger = logger
+var getLogger func(c *gin.Context) logrus.FieldLogger
+
+func SetGetLogger(f func(c *gin.Context) logrus.FieldLogger) {
+	getLogger = f
 }
 
 func ErrorHandler(c *gin.Context) {
+	logger := getLogger(c)
+	if logger == nil {
+		logger = fallbackLogger
+	}
 	c.Next()
 	code := http.StatusInternalServerError
 	var errWithCode *myerrors.ErrorWithCode
 	if len(c.Errors) > 0 {
-		logger := GetLogger(c)
 		// there better be only one error
-		for _, err := range c.Errors {
-			if errors.As(err, &errWithCode) {
-				code = errWithCode.StatusCode
+		for _, e := range c.Errors {
+			if httpError, ok := e.Err.(myerrors.HttpError); ok {
+				code = httpError.StatusCode()
 				logger.Infof("error with code %d", code)
 			}
-			logger.Error(err)
+			logger.Error(e)
 		}
 		// print last non-500 error
 		//TODO: json empty and code not working
@@ -51,7 +55,7 @@ func LoggerSetter(c *gin.Context) {
 	if requestId == "" {
 		requestId = fmt.Sprintf("gen-%d", time.Now().UnixNano())
 	}
-	logger := commonLogger.WithField("request_id", requestId)
+	logger := fallbackLogger.WithField("request_id", requestId)
 	c.Set("LOGGER", logger)
 	c.Next()
 }
@@ -59,7 +63,7 @@ func LoggerSetter(c *gin.Context) {
 func GetLogger(c *gin.Context) *logrus.Entry {
 	l, ok := c.MustGet("LOGGER").(*logrus.Entry)
 	if !ok {
-		l = commonLogger.WithField("request_id", "unknown")
+		l = fallbackLogger.WithField("request_id", "unknown")
 	}
 	return l
 }
